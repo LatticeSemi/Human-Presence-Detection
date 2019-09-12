@@ -1,0 +1,8 @@
+easydict
+joblib
+keras
+opencv-python
+pillow
+scikit-video
+matplotlib
+ipywidgets

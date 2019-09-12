@@ -1,0 +1,1 @@
+./scripts/train.sh -net squeezeDet -train_dir /tmp/logs/humandet_tp -gpu 0

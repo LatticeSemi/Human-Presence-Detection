@@ -1,0 +1,27 @@
+Install Docker in different operating system
+--------------------------------------------
+
+1. For Ubuntu(16.04 version): 
+--------------------------
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+sudo apt-get update
+apt-cache policy docker-ce
+sudo apt-get install -y docker-ce
+sudo systemctl status docker
+
+For details, refer to: 
+----------------------
+https://www.digitalocean.com/community/tutorials/how-to-install-and-use-docker-on-ubuntu-16-04
+
+
+2. For Windows
+--------------
+Docker toolbox in windows 7/10 host with linux container
+
+ - Install Docker toolbox in windows host from below link 
+	https://docs.docker.com/toolbox/toolbox_install_windows/
+	https://docs.docker.com/toolbox/overview/ 
+ - Install xlaunch to share display from host to docker container in windows 
+	https://dev.to/darksmile92/run-gui-app-in-linux-docker-container-on-windows-host-4kde
