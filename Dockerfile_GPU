@@ -9,9 +9,19 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -y jupyter-notebook jupyter-core 
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 RUN apt-get install -y wget
 
-############################ For CPU #########################################################
+############################ For GPU #########################################################
 
-RUN pip3 install tensorflow==1.12.0
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/cuda-repo-ubuntu1604_10.1.105-1_amd64.deb && dpkg -i cuda-repo-ubuntu1604_10.1.105-1_amd64.deb
+RUN wget -qO - http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub | apt-key add -  
+RUN apt-get update 
+RUN DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-overwrite" install -y cuda-9-0 
+RUN echo "export PATH=/usr/local/cuda/bin${PATH:+:${PATH}}" >> /etc/bash.bashrc 
+RUN echo "export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> /etc/bash.bashrc 
+
+COPY cuda/cudnn.h /usr/local/cuda/include/
+COPY cuda/libcudnn* /usr/local/cuda/lib64/
+RUN chmod a+r /usr/local/cuda/include/cudnn.h /usr/local/cuda/lib64/libcudnn*
+RUN pip3 install tensorflow-gpu==1.12.0
 
 ##############################################################################################
 
