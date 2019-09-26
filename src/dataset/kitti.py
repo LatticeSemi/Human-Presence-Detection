@@ -15,11 +15,9 @@ class kitti(imdb):
     imdb.__init__(self, 'kitti_'+image_set, mc)
     self._image_set = image_set
     self._data_root_path = data_path
-    self._image_path = os.path.join(self._data_root_path, 'training', 'image_2')
-    self._label_path = os.path.join(self._data_root_path, 'training', 'label_2')
+    self._image_path = os.path.join(self._data_root_path, 'training', 'images')
+    self._label_path = os.path.join(self._data_root_path, 'training', 'labels')
     self._classes = self.mc.CLASS_NAMES
-    #print("self.classes", self.classes)
-    #print("self.num_classes", self.num_classes)
     self._class_to_idx = dict(zip(self.classes, range(self.num_classes)))
 
     # a list of string indices of images in the directory
@@ -42,8 +40,17 @@ class kitti(imdb):
     assert os.path.exists(image_set_file), \
         'File does not exist: {}'.format(image_set_file)
 
+    image_idx=[]
     with open(image_set_file) as f:
-      image_idx = [x.strip() for x in f.readlines()]
+      #  image_idx = [x.strip() for x in f.readlines()]
+      lines = f.readlines()
+    f.close()
+
+    for x in lines:
+      idx = x.strip()
+      if self._is_empty_label(idx) == False: # non empty label file
+        image_idx.append(idx)
+
     return image_idx
 
   def _image_path_at(self, idx):
@@ -51,6 +58,15 @@ class kitti(imdb):
     assert os.path.exists(image_path), \
         'Image does not exist: {}'.format(image_path)
     return image_path
+
+  def _is_empty_label(self, index):
+    max_person = 0
+    filename = os.path.join(self._label_path, index+'.txt')
+    with open(filename, 'r') as f:
+      lines = f.readlines()
+    f.close()
+    num_person = len(lines)
+    return (num_person == 0)
 
   def _load_kitti_annotation(self):
     '''
@@ -72,46 +88,25 @@ class kitti(imdb):
     max_person = 0
     for index in self._image_idx:
       filename = os.path.join(self._label_path, index+'.txt')
-      #print('label file name:', filename)
       with open(filename, 'r') as f:
         lines = f.readlines()
       f.close()
       bboxes = []
       num_person = 0
       for line in lines:
-	#print('label line:', line)
         obj = line.strip().split(' ')
         try:
           cls = self._class_to_idx[obj[0].lower().strip()] # person (14) -> class 0
         except:
-	  #print('skip other class:', obj[0].lower().strip())
           continue
 
         num_person = num_person + 1
-        # only person class
-        #if self.mc.EXCLUDE_HARD_EXAMPLES and _get_obj_level(obj) > 3:
-	#  #print('hard')
-        #  continue
-        #xmin = float(obj[4])
-        #ymin = float(obj[5])
-        #xmax = float(obj[6])
-        #ymax = float(obj[7])
-        #assert xmin >= 0.0 and xmin <= xmax, \
-        #    'Invalid bounding box x-coord xmin {} or xmax {} at {}.txt' \
-        #        .format(xmin, xmax, index)
-        #assert ymin >= 0.0 and ymin <= ymax, \
-        #    'Invalid bounding box y-coord ymin {} or ymax {} at {}.txt' \
-        #        .format(ymin, ymax, index)
-	#print("value rd:", xmin, ymin, xmax, ymax)
-        #x, y, w, h = bbox_transform_inv([xmin, ymin, xmax, ymax])
         x, y, w, h = float(obj[4]), float(obj[5]), float(obj[6]), float(obj[7])
         bboxes.append([x, y, w, h, cls])
-	#print("box:", x, y, w, h, cls)
-	#break # <-- only one line in each file is used
 
       assert len(bboxes) > 0, 'empty box image'
       if num_person > max_person:
-	      max_person = num_person
+        max_person = num_person
       idx2annotation[index] = bboxes
 
     print('max person:', max_person)
@@ -131,14 +126,9 @@ class kitti(imdb):
     det_file_dir = os.path.join(
         eval_dir, 'detection_files_{:s}'.format(global_step), 'data/')
     print('det_file_dir: '+det_file_dir)
-    #print(os.path.isdir('/tmp/logs/squeezedet/val/'))
-    #print(os.path.isdir('/tmp/logs/squeezedet/val/detection_files_105000/'))
-    #print(os.path.isdir('/tmp/logs/squeezedet/val/detection_files_105000/data'))
-    #print(os.path.isdir('/tmp/logs/squeezedet/val/detection_files_105000/data/'))
-    #print(os.path.isdir(det_file_dir))
     if not os.path.isdir(det_file_dir):
       print('make new directory')
-      os.makedirs(det_file_dir) # 
+      os.makedirs(det_file_dir)
       os.system('cp -r /data/trafficsignal/lisa/training/label_2/vid* '+det_file_dir)
 
     for im_idx, index in enumerate(self._image_idx):
@@ -146,7 +136,7 @@ class kitti(imdb):
       with open(filename, 'wt') as f:
         for cls_idx, cls in enumerate(self._classes):
           dets = all_boxes[cls_idx][im_idx]
-          for k in range(len(dets)):
+          for k in xrange(len(dets)):
             f.write(
                 '{:s} -1 -1 0.0 {:.2f} {:.2f} {:.2f} {:.2f} 0.0 0.0 0.0 0.0 0.0 '
                 '0.0 0.0 {:.3f}\n'.format(

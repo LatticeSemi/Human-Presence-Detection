@@ -14,6 +14,9 @@ from easydict import EasyDict as edict
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.training import moving_averages
+#from binary_ops import binary_tanh
+#from binary_ops import binarize
+from binary_ops import lin_8b_quant
 
 def _add_loss_summaries(total_loss):
   """Add summaries for losses
@@ -80,8 +83,7 @@ class ModelSkeleton:
 
     # image batch input
     self.ph_image_input = tf.placeholder(
-        tf.float32, [mc.BATCH_SIZE, mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 3], # RGB color
-        #tf.float32, [mc.BATCH_SIZE, mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 1], # gray color <---------------
+        tf.float32, [mc.BATCH_SIZE, mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 3],
         name='image_input'
     )
     # A tensor where an element is 1 if the corresponding box is "responsible"
@@ -108,8 +110,7 @@ class ModelSkeleton:
         capacity=mc.QUEUE_CAPACITY,
         dtypes=[tf.float32, tf.float32, tf.float32, 
                 tf.float32, tf.float32],
-        shapes=[[mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 3], # RGB color <---------------
-        #shapes=[[mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 1], # gray color
+        shapes=[[mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 3],
                 [mc.ANCHORS, 1],
                 [mc.ANCHORS, 4],
                 [mc.ANCHORS, 4],
@@ -150,37 +151,37 @@ class ModelSkeleton:
       preds = self.preds
 
       # probability
-      num_class_probs = mc.ANCHOR_PER_GRID*mc.CLASSES # --> [6*9]=54
+      num_class_probs = mc.ANCHOR_PER_GRID*mc.CLASSES
       print ('ANCHOR_PER_GRID:', mc.ANCHOR_PER_GRID)
       print ('CLASSES:', mc.CLASSES)
       print ('preds2:', preds[:, :, :, :num_class_probs])
       print ('ANCHORS:', mc.ANCHORS)
 
       self.pred_class_probs = tf.reshape(
-          tf.nn.softmax( # --> [237600,35(CLASSES)]
+          tf.nn.softmax(
               tf.reshape(
-                  preds[:, :, :, :num_class_probs], # --> [:::54]
-                  [-1, mc.CLASSES]                  # --> [*, 9]
+                  preds[:, :, :, :num_class_probs],
+                  [-1, mc.CLASSES]
               )
           ),
-          [mc.BATCH_SIZE, mc.ANCHORS, mc.CLASSES], # --> [20,1536,9]
+          [mc.BATCH_SIZE, mc.ANCHORS, mc.CLASSES],
           name='pred_class_probs'
       )
       
       # confidence
-      num_confidence_scores = mc.ANCHOR_PER_GRID+num_class_probs # 6+54=60
+      num_confidence_scores = mc.ANCHOR_PER_GRID+num_class_probs
       self.pred_conf = tf.sigmoid(
           tf.reshape(
-              preds[:, :, :, num_class_probs:num_confidence_scores], #[54:60]
-              [mc.BATCH_SIZE, mc.ANCHORS] # [20,1536,1]
+              preds[:, :, :, num_class_probs:num_confidence_scores],
+              [mc.BATCH_SIZE, mc.ANCHORS]
           ),
           name='pred_confidence_score'
       )
 
       # bbox_delta
       self.pred_box_delta = tf.reshape(
-          preds[:, :, :, num_confidence_scores:], #[60:]
-          [mc.BATCH_SIZE, mc.ANCHORS, 4], # [20,1536,4]
+          preds[:, :, :, num_confidence_scores:],
+          [mc.BATCH_SIZE, mc.ANCHORS, 4],
           name='bbox_delta'
       )
 
@@ -201,12 +202,19 @@ class ModelSkeleton:
             anchor_x + delta_x * anchor_w, name='bbox_cx')
         box_center_y = tf.identity(
             anchor_y + delta_y * anchor_h, name='bbox_cy')
-        box_width = tf.identity(
-            anchor_w * util.safe_exp(delta_w, mc.EXP_THRESH),
-            name='bbox_width')
-        box_height = tf.identity(
-            anchor_h * util.safe_exp(delta_h, mc.EXP_THRESH),
-            name='bbox_height')
+        if False:
+            box_width = tf.identity(
+                anchor_w * util.safe_exp(delta_w, mc.EXP_THRESH),
+                name='bbox_width')
+            box_height = tf.identity(
+                anchor_h * util.safe_exp(delta_h, mc.EXP_THRESH),
+                name='bbox_height')
+        else:
+            # change to remove exp in FPGA
+            box_width = tf.identity(
+                anchor_w * delta_w, name='bbox_width')
+            box_height = tf.identity(
+                anchor_h * delta_h, name='bbox_height')
 
         self._activation_summary(delta_x, 'delta_x')
         self._activation_summary(delta_y, 'delta_y')
@@ -350,13 +358,10 @@ class ModelSkeleton:
     _add_loss_summaries(self.loss)
 
     opt = tf.train.MomentumOptimizer(learning_rate=lr, momentum=mc.MOMENTUM)
-    #opt = tf.train.AdamOptimizer(learning_rate=lr)
     grads_vars = opt.compute_gradients(self.loss, tf.trainable_variables())
 
     with tf.variable_scope('clip_gradient') as scope:
       for i, (grad, var) in enumerate(grads_vars):
-	#print('var', var)
-	#print('grad', grad)
         grads_vars[i] = (tf.clip_by_norm(grad, mc.MAX_GRAD_NORM), var)
 
     apply_gradient_op = opt.apply_gradients(grads_vars, global_step=self.global_step)
@@ -375,16 +380,21 @@ class ModelSkeleton:
     """Define the visualization operation."""
     mc = self.mc
     self.image_to_show = tf.placeholder(
-        tf.float32, [None, mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 3], # RGB color
-        #tf.float32, [None, mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 1], # gray color <-------------------
+        tf.float32, [None, mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 3],
         name='image_to_show'
     )
-    self.viz_op = tf.summary.image('sample_detection_results', # <----- requires RGB
+    self.viz_op = tf.summary.image('sample_detection_results',
         self.image_to_show, collections='image_summary',
         max_outputs=mc.BATCH_SIZE)
 
-  def binary_wrapper(self, x, a_bin=True): # activation binarization
-    return tf.nn.relu(x)
+  def binary_wrapper(self, x, a_bin=16, min_rng=-0.5, max_rng=0.5): # activation binarization
+    if a_bin == 1:
+        return binary_tanh(x)
+    elif a_bin == 8:
+        x_quant = lin_8b_quant(x, min_rng=min_rng, max_rng=max_rng)
+        return tf.nn.relu(x_quant)
+    else:
+        return tf.nn.relu(x)
 
   def _batch_norm(self, name, x):
     with tf.variable_scope(name):
@@ -399,7 +409,6 @@ class ModelSkeleton:
 
       control_inputs = []
 
-      #if self.mode == 'train':
       if self.mc.IS_TRAINING:
         mean, variance = tf.nn.moments(x, [0, 1, 2], name='moments')
 
@@ -410,10 +419,6 @@ class ModelSkeleton:
             'moving_variance', params_shape, tf.float32,
             initializer=tf.constant_initializer(1.0, tf.float32), trainable=False)
 
-        #self._extra_train_ops.append(moving_averages.assign_moving_average(
-        #    moving_mean, mean, 0.9))
-        #self._extra_train_ops.append(moving_averages.assign_moving_average(
-        #    moving_variance, variance, 0.9))
         update_moving_mean = moving_averages.assign_moving_average(moving_mean, mean, 0.9)
         update_moving_var  = moving_averages.assign_moving_average(moving_variance, variance, 0.9)
         control_inputs = [update_moving_mean, update_moving_var]
@@ -529,7 +534,7 @@ class ModelSkeleton:
 
   def _conv_layer(
       self, layer_name, inputs, filters, size, stride, padding='SAME',
-      freeze=False, xavier=False, relu=True, w_bin=False, stddev=0.001):
+      freeze=False, xavier=False, relu=True, w_bin=16, bias_on=True, stddev=0.001):
     """Convolutional layer operation constructor.
 
     Args:
@@ -595,17 +600,35 @@ class ModelSkeleton:
       #                          trainable=(not freeze))
       #self.model_params += [kernel, biases]
 
-      if True: # no bias in conv
-	  #biases = _variable_on_device('biases', [filters], bias_init, trainable=(not freeze))
+      if w_bin == 1: # binarized conv
           self.model_params += [kernel]
-          conv = tf.nn.conv2d(inputs, kernel, [1, stride, stride, 1], padding=padding, name='convolution')
-	  #conv_bias = tf.nn.bias_add(conv, biases, name='bias_add')
+          kernel_bin = binarize(kernel)
+          tf.summary.histogram('kernel_bin', kernel_bin)
+          conv = tf.nn.conv2d(inputs, kernel_bin, [1, stride, stride, 1], padding=padding, name='convolution')
           conv_bias = conv
+      elif w_bin == 8: # 8b quantization
+          kernel_quant = lin_8b_quant(kernel)
+          tf.summary.histogram('kernel_quant', kernel_quant)
+          conv = tf.nn.conv2d(inputs, kernel_quant, [1, stride, stride, 1], padding=padding, name='convolution')
+          self.model_params += [kernel]
+
+          if bias_on:
+              biases = _variable_on_device('biases', [filters], bias_init, trainable=(not freeze))
+              biases_quant = lin_8b_quant(biases)
+              tf.summary.histogram('biases_quant', biases_quant)
+              self.model_params += [biases]
+              conv_bias = tf.nn.bias_add(conv, biases_quant, name='bias_add')
+          else:
+              conv_bias = conv
       else:
-          biases = _variable_on_device('biases', [filters], bias_init, trainable=(not freeze))
-          self.model_params += [kernel, biases]
           conv = tf.nn.conv2d(inputs, kernel, [1, stride, stride, 1], padding=padding, name='convolution')
-          conv_bias = tf.nn.bias_add(conv, biases, name='bias_add')
+          self.model_params += [kernel]
+          if bias_on:
+              biases = _variable_on_device('biases', [filters], bias_init, trainable=(not freeze))
+              self.model_params += [biases]
+              conv_bias = tf.nn.bias_add(conv, biases, name='bias_add')
+          else:
+              conv_bias = conv
       
       if relu:
         out = tf.nn.relu(conv_bias, 'relu')
@@ -697,13 +720,13 @@ class ModelSkeleton:
             kernel_val = np.reshape(
                 np.transpose(
                     np.reshape(
-                        kernel_val, # O x (C*H*W)
+                        kernel_val,
                         (hiddens, input_shape[3], input_shape[1], input_shape[2])
-                    ), # O x C x H x W
+                    ),
                     (2, 3, 1, 0)
-                ), # H x W x C x O
+                ),
                 (dim, -1)
-            ) # (H*W*C) x O
+            )
             # check the size after layout transform
             assert kernel_val.shape == (dim, hiddens), \
                 'kernel shape error at {}'.format(layer_name)

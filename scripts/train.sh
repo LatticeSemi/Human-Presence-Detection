@@ -2,9 +2,9 @@
 
 export GPUID=0
 export NET="squeezeDet"
-export TRAIN_DIR="/tmp/logs/humandet_tp/"
+export TRAIN_DIR="./logs/humandet/"
 
-export TRAIN_DATA_DIR="../data"
+export TRAIN_DATA_DIR="./data/humandet"
 
 if [ $# -eq 0 ]
 then
@@ -71,9 +71,6 @@ case "$NET" in
 esac
 
 
-#  --image_set=train_b1f5 \
-#  --image_set=train.voc \
-#  --image_set=train_b1f5_no_small_2525 \
 python ./src/train.py \
   --dataset=KITTI \
   --pretrained_model_path=$PRETRAINED_MODEL_PATH \

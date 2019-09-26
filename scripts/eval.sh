@@ -2,8 +2,10 @@
 
 export GPUID=0
 export NET="squeezeDet"
-export EVAL_DIR="/tmp/logs/SqueezeDet/"
+export EVAL_DIR="./logs/humancnt/"
 export IMAGE_SET="val"
+
+export TRAIN_DATA_DIR="/data/humancnt"
 
 if [ $# -eq 0 ]
 then
@@ -62,7 +64,7 @@ done
 # =========================================================================== #
 python ./src/eval.py \
   --dataset=KITTI \
-  --data_path=./data/TrainData \
+  --data_path=$TRAIN_DATA_DIR \
   --image_set=$IMAGE_SET \ # val
   --eval_dir="$EVAL_DIR/$IMAGE_SET" \ # /tmp/logs/squeezedet/val/
   --checkpoint_path="$EVAL_DIR/train" \ # /tmp/logs/squeezedet/train/

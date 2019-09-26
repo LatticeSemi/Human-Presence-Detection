@@ -90,12 +90,9 @@ class imdb(object):
       im = cv2.imread(self._image_path_at(i))
       im = im.astype(np.float32, copy=False)
       im -= mc.BGR_MEANS
+      im /= 128.0 # to make input in the range of [0, 2)
       orig_h, orig_w, _ = [float(v) for v in im.shape]
-      im = cv2.resize(im, (mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT), interpolation=CV_INTER_AREA)
-
-      #im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) # gray color instead of RGB <----------------
-      #im = im - np.array([[[128]]]) <----------------
-      #im = im.reshape((mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 1)) <----------------
+      im = cv2.resize(im, (mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT), interpolation=cv2.INTER_AREA)
 
       x_scale = mc.IMAGE_WIDTH/orig_w
       y_scale = mc.IMAGE_HEIGHT/orig_h
@@ -135,6 +132,7 @@ class imdb(object):
         self._cur_idx += mc.BATCH_SIZE
 
     image_per_batch = []
+    image_per_batch_viz = []
     label_per_batch = []
     bbox_per_batch  = []
     delta_per_batch = []
@@ -148,9 +146,6 @@ class imdb(object):
 
     for idx in batch_idx:
       # load the image
-      #im = cv2.imread(self._image_path_at(idx), cv2.IMREAD_GRAYSCALE).astype(np.float32, copy=False)
-      #print('file name:', self._image_path_at(idx))
-      #im = cv2.imread(self._image_path_at(idx)).astype(np.float32, copy=False)
       im = cv2.imread(self._image_path_at(idx))
       if im is None:
         print('failed file read:'+self._image_path_at(idx))
@@ -160,29 +155,14 @@ class imdb(object):
       # random brightness control
       hsv = cv2.cvtColor(im, cv2.COLOR_BGR2HSV)
       h, s, v = cv2.split(hsv)
-      add_v = np.random.randint(0, 255)
-      v += (add_v - 128)
+      add_v = np.random.randint(55, 200) - 128
+      v = np.where(v <= 255 - add_v, v + add_v, 255)
       final_hsv = cv2.merge((h, s, v))
       im = cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
-      if True: # add random noise to BGR
-          b,g,r = cv2.split(im)
-          add_b = np.random.random_integers(0, 32, b.shape) # characteristics of Himax module
-          add_g = np.random.random_integers(0, 12, g.shape)
-          add_r = np.random.random_integers(0, 12, r.shape)
-	  #print("add_bgr={} {} {}".format(add_b, add_g, add_r))
-	  #print("shape of b={}".format(b.shape))
-	  #print("shape of add_b={}".format(add_b.shape))
-          b += (add_b - 16)
-          g += (add_g -  6)
-          r += (add_r -  6)
-          im = cv2.merge((b, g, r))
 
       im -= mc.BGR_MEANS # <-------------------------------
-      #im -= np.array([[128]]) # <-------------------------------
-      #print('im_shae',im.shape) # <-------------------------------
+      im /= 128.0 # to make input in the range of [0, 2)
       orig_h, orig_w, _ = [float(v) for v in im.shape]
-      #print('orig_h:', orig_h)
-      #print('orig_w:', orig_w)
 
       # load annotations
       label_per_batch.append([b[4] for b in self._rois[idx][:]])
@@ -191,93 +171,18 @@ class imdb(object):
       assert np.any(gt_bbox[:,1] > 0), 'less than 0 gt_bbox[1]'
       assert np.any(gt_bbox[:,2] > 0), 'less than 0 gt_bbox[2]'
       assert np.any(gt_bbox[:,3] > 0), 'less than 0 gt_bbox[3]'
-      '''
 
-      b[0] = b[0]*orig_w # cx
-      b[1] = b[1]*orig_h # cy
-      b[2] = b[2]*orig_w # w
-      b[3] = b[3]*orig_h # h
-
-
-      # b = center of x(xmin+width/2), center of y(ymin+height/2), width, height
-      #print('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAa')
-      #print('image path:', self._image_path_at(idx))
-      #print('bs=', b[0], b[1], b[2], b[3])
-      #print('orig_w=', orig_w)
-      #print('orig_h=', orig_h)
-      #print('1st value', b[0]-b[2]/2+mc.IMAGE_WIDTH-orig_w)
-      #print('2nd value', b[0]-b[2]/2)
-      #print('3rd value', mc.IMAGE_WIDTH-b[2])
-      assert max(0, b[0]-b[2]/2+mc.IMAGE_WIDTH*2-orig_w) < min(b[0]-b[2]/2+1, mc.IMAGE_WIDTH*2-b[2]+1), 'incorrect lo/hi' 
-      disp_x = np.random.randint(max(0, b[0]-b[2]/2+mc.IMAGE_WIDTH*2-orig_w), 
-                                 min(b[0]-b[2]/2+1, mc.IMAGE_WIDTH*2-b[2]+1)) 
-      disp_y = np.random.randint(max(0, b[1]-b[3]/2+mc.IMAGE_HEIGHT*2-orig_h), 
-                                 min(b[1]-b[3]/2+1, mc.IMAGE_HEIGHT*2-b[3]+1))
-      crop_x = int(b[0]-b[2]/2 - disp_x) # width =b[2]
-      crop_y = int(b[1]-b[3]/2 - disp_y) # height=b[3]
-      #print('crops', crop_x, crop_y)
-      im = im[crop_y:crop_y+mc.IMAGE_HEIGHT*2, crop_x:crop_x+mc.IMAGE_WIDTH*2]
-      #b[0] = disp_x+b[2]/2 #crop_x
-      #b[1] = disp_y+b[3]/2 #crop_y
-
-      gt_bbox[:, 0] = disp_x+b[2]/2 #crop_x
-      gt_bbox[:, 1] = disp_y+b[3]/2 #crop_y
-      #print('new bs=', gt_bbox[0], b[2], b[3])
-      assert crop_x >= 0 and crop_y >= 0, 'crop_x and crop_y incorrect'
-      orig_h, orig_w, _ = [float(v) for v in im.shape]
-      #print('size of cropped image', orig_h, orig_w)
-      assert orig_h == mc.IMAGE_HEIGHT*2 and orig_w == mc.IMAGE_WIDTH*2, 'incorrect size of cropped image'
-      '''
-
-
-      #b[0] = b[0] 
       if mc.DATA_AUGMENTATION:
-        assert mc.DRIFT_X >= 0 and mc.DRIFT_Y > 0, \
-            'mc.DRIFT_X and mc.DRIFT_Y must be >= 0'
-
-        if mc.DRIFT_X > 0 or mc.DRIFT_Y > 0:
-          # Ensures that gt boundibg box is not cutted out of the image
-	  #print('gt_bbox', gt_bbox)
-	  #print('gt_bbox[:, 0]', gt_bbox[:, 0])
-	  #print('gt_bbox[:, 2]', gt_bbox[:, 2])
-          max_drift_x = min(gt_bbox[:, 0] - gt_bbox[:, 2]/2.0+1)
-          max_drift_y = min(gt_bbox[:, 1] - gt_bbox[:, 3]/2.0+1)
-	  #print('max_drift_x=', max_drift_x)
-	  #print('max_drift_y=', max_drift_y)
-          assert max_drift_x >= 0 and max_drift_y >= 0, 'bbox out of image'
-
-          dy = np.random.randint(-mc.DRIFT_Y, min(mc.DRIFT_Y+1, max_drift_y))
-          dx = np.random.randint(-mc.DRIFT_X, min(mc.DRIFT_X+1, max_drift_x))
-
-          # shift bbox
-          gt_bbox[:, 0] = gt_bbox[:, 0] - dx
-          gt_bbox[:, 1] = gt_bbox[:, 1] - dy
-
-          # distort image
-          orig_h -= dy
-          orig_w -= dx
-          orig_x, dist_x = max(dx, 0), max(-dx, 0)
-          orig_y, dist_y = max(dy, 0), max(-dy, 0)
-
-          distorted_im = np.zeros(
-              (int(orig_h), int(orig_w), 3)).astype(np.float32)
-          distorted_im[dist_y:, dist_x:, :] = im[orig_y:, orig_x:, :]
-	  #print(distorted_im.shape)
-	  #print(im.shape)
-          im = distorted_im
-
         # Flip image with 50% probability
         if np.random.randint(2) > 0.5:
           im = im[:, ::-1, :]
           gt_bbox[:, 0] = orig_w - 1 - gt_bbox[:, 0]
 
+
       # scale image
-      #im = cv2.resize(im, (mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT))
-      im = cv2.resize(im, (mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT), interpolation=cv2.INTER_AREA)
-      #im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) # gray color instead of RGB # <-------------------------------
-      #im = im - np.array([[[128]]]) # <----------------------------------------------????????????????
-      #im = im.reshape((mc.IMAGE_HEIGHT, mc.IMAGE_WIDTH, 1))
+      #im = cv2.resize(im, (mc.IMAGE_WIDTH, mc.IMAGE_HEIGHT), interpolation=cv2.INTER_AREA)
       image_per_batch.append(im)
+      image_per_batch_viz.append(im*128.0)
 
       # scale annotation
       x_scale = mc.IMAGE_WIDTH/orig_w
@@ -285,6 +190,8 @@ class imdb(object):
       gt_bbox[:, 0::2] = gt_bbox[:, 0::2]*x_scale
       gt_bbox[:, 1::2] = gt_bbox[:, 1::2]*y_scale
       bbox_per_batch.append(gt_bbox)
+
+
 
       aidx_per_image, delta_per_image = [], []
       aidx_set = set()
@@ -320,12 +227,15 @@ class imdb(object):
               break
 
         box_cx, box_cy, box_w, box_h = gt_bbox[i]
-        #print(box_cx, box_cy, box_w, box_h)
         delta = [0]*4
         delta[0] = (box_cx - mc.ANCHOR_BOX[aidx][0])/mc.ANCHOR_BOX[aidx][2]
         delta[1] = (box_cy - mc.ANCHOR_BOX[aidx][1])/mc.ANCHOR_BOX[aidx][3]
-        delta[2] = np.log(box_w/mc.ANCHOR_BOX[aidx][2])
-        delta[3] = np.log(box_h/mc.ANCHOR_BOX[aidx][3])
+        if False:
+          delta[2] = np.log(box_w/mc.ANCHOR_BOX[aidx][2])
+          delta[3] = np.log(box_h/mc.ANCHOR_BOX[aidx][3])
+        else: # to remove exp in FPGA
+          delta[2] = box_w/mc.ANCHOR_BOX[aidx][2]
+          delta[3] = box_h/mc.ANCHOR_BOX[aidx][3]
 
         aidx_per_image.append(aidx)
         delta_per_image.append(delta)
@@ -341,7 +251,7 @@ class imdb(object):
       print ('number of objects with 0 iou: {}'.format(num_zero_iou_obj))
 
     return image_per_batch, label_per_batch, delta_per_batch, \
-        aidx_per_batch, bbox_per_batch
+        aidx_per_batch, bbox_per_batch, image_per_batch_viz
 
   def evaluate_detections(self):
     raise NotImplementedError
@@ -396,6 +306,6 @@ class imdb(object):
         out_im_path = os.path.join(det_im_dir, str(i)+image_format)
         im.save(out_im_path)
         im = np.array(im)
-        out_ims.append(im[:,:,::-1]) # RGB to BGR
+        out_ims.append(im[:,:,::-1])
     return out_ims
 

@@ -22,7 +22,22 @@ def base_model_config(dataset='PASCAL_VOC'):
                        'car', 'cat', 'chair', 'cow', 'diningtable', 'dog',
                        'horse', 'motorbike', 'person', 'pottedplant', 'sheep',
                        'sofa', 'train', 'tvmonitor')
-  elif cfg.DATASET == 'KITTI': # what we use in human presence detection
+  elif cfg.DATASET == 'KITTI':
+    #cfg.CLASS_NAMES = ('car', 'pedestrian', 'cyclist')
+    # Traffic signal (vid directory only)
+    # class names should be lower case
+    #cfg.CLASS_NAMES = ('addedlane', 'dip', 'donotpass', 
+    #		       'intersection', 'keepright', 'laneends', 'merge', 'noleftturn', 'norightturn', 
+    #		       'pedestriancrossing', 'rampspeedadvisory20', 
+    #		       'rampspeedadvisory45', 'rampspeedadvisory50', 
+    #		       'rampspeedadvisoryurdbl', 'rightlanemustturn', 'school', 
+    #		       'schoolspeedlimit25', 'signalahead', 'slow', 'speedlimit25', 
+    #		       'speedlimit35', 'speedlimit40', 'speedlimit45', 'speedlimit50', 
+    #		       'speedlimit55', 'speedlimit65', 'speedlimiturdbl', 'stop', 'stopahead', 
+    #		       'truckspeedlimit55', 
+    #		       'turnleft', 'turnright', 'yield', 'yieldahead', 'zoneahead45')
+    # Traffic signal (video directory + speed limit only)
+    # class names should be lower case
     cfg.CLASS_NAMES = ('person',) # person
 
   # number of categories to classify
@@ -41,10 +56,10 @@ def base_model_config(dataset='PASCAL_VOC'):
   cfg.KEEP_PROB = 0.5
 
   # image width
-  cfg.IMAGE_WIDTH = 224
+  cfg.IMAGE_WIDTH = 64 #224
 
   # image height
-  cfg.IMAGE_HEIGHT = 224
+  cfg.IMAGE_HEIGHT = 64 #224
 
   # anchor box, array of [cx, cy, w, h]. To be defined later
   cfg.ANCHOR_BOX = []

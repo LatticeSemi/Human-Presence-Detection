@@ -4,15 +4,14 @@
 
 import numpy as np
 
-from .config import base_model_config
+from config import base_model_config
 
-def kitti_squeezeDet_config():
+def kitti_squeezeDetPlus_config():
   """Specify the parameters to tune below."""
   mc                       = base_model_config('KITTI')
 
-  mc.IMAGE_WIDTH           = 64 #224
-  mc.IMAGE_HEIGHT          = 64 #224
-
+  mc.IMAGE_WIDTH           = 1242
+  mc.IMAGE_HEIGHT          = 375
   mc.BATCH_SIZE            = 20
 
   mc.WEIGHT_DECAY          = 0.0001
@@ -30,7 +29,7 @@ def kitti_squeezeDet_config():
   mc.PLOT_PROB_THRESH      = 0.4
   mc.NMS_THRESH            = 0.4
   mc.PROB_THRESH           = 0.005
-  mc.TOP_N_DETECTION       = 10
+  mc.TOP_N_DETECTION       = 64
 
   mc.DATA_AUGMENTATION     = True
   mc.DRIFT_X               = 150
@@ -39,28 +38,19 @@ def kitti_squeezeDet_config():
 
   mc.ANCHOR_BOX            = set_anchors(mc)
   mc.ANCHORS               = len(mc.ANCHOR_BOX)
-  mc.ANCHOR_PER_GRID       = 7
+  mc.ANCHOR_PER_GRID       = 9
 
   return mc
 
 def set_anchors(mc):
-# H, W, B = 14, 14, 7
-  H, W, B = 4, 4, 7 # 64/16=4, 7 anchors
-  div_scale = 2.0 * 3.5 # 224/64=3.5
-
+  H, W, B = 22, 76, 9
   anchor_shapes = np.reshape(
       [np.array(
-          [
-	   [int(368./div_scale), int(368./div_scale)], 
-	   [int(276./div_scale), int(276./div_scale)], 
-	   [int(184./div_scale), int(184./div_scale)],
-	   [int(138./div_scale), int(138./div_scale)],
-           [int( 92./div_scale), int( 92./div_scale)], 
-           [int( 69./div_scale), int( 69./div_scale)], 
-	   [int( 46./div_scale), int( 46./div_scale)]])] * H * W, 
+          [[  36.,  37.], [ 366., 174.], [ 115.,  59.],
+           [ 162.,  87.], [  38.,  90.], [ 258., 173.],
+           [ 224., 108.], [  78., 170.], [  72.,  43.]])] * H * W,
       (H, W, B, 2)
   )
-
   center_x = np.reshape(
       np.transpose(
           np.reshape(
