@@ -17,17 +17,17 @@ import tensorflow as tf
 from nn_skeleton import ModelSkeleton
 
 class SqueezeDet(ModelSkeleton):
-  def __init__(self, mc, gpu_id=0):
+  def __init__(self, mc,freeze_layers = [], gpu_id=0):
     with tf.device('/gpu:{}'.format(gpu_id)):
       ModelSkeleton.__init__(self, mc)
 
-      self._add_forward_graph()
+      self._add_forward_graph(freeze_layers)
       self._add_interpretation_graph()
       self._add_loss_graph()
       self._add_train_graph()
       self._add_viz_graph()
 
-  def _add_forward_graph(self):
+  def _add_forward_graph(self,freeze_layers):
     """NN architecture."""
 
     mc = self.mc
@@ -62,13 +62,19 @@ class SqueezeDet(ModelSkeleton):
 
         bias_on = False # no bias for T+
 
-    fire1 = self._fire_layer('fire1', self.image_input, oc=depth[0], freeze=False, w_bin=fl_w_bin, a_bin=fl_a_bin,                min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
-    fire2 = self._fire_layer('fire2', fire1,            oc=depth[1], freeze=False, w_bin=ml_w_bin, a_bin=ml_a_bin, pool_en=False, min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
-    fire3 = self._fire_layer('fire3', fire2,            oc=depth[2], freeze=False, w_bin=ml_w_bin, a_bin=ml_a_bin,                min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
-    fire4 = self._fire_layer('fire4', fire3,            oc=depth[3], freeze=False, w_bin=ml_w_bin, a_bin=ml_a_bin, pool_en=False, min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
-    fire5 = self._fire_layer('fire5', fire4,            oc=depth[4], freeze=False, w_bin=ml_w_bin, a_bin=ml_a_bin,                min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
-    fire6 = self._fire_layer('fire6', fire5,            oc=depth[5], freeze=False, w_bin=ml_w_bin, a_bin=ml_a_bin, pool_en=False, min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
-    fire7 = self._fire_layer('fire7', fire6,            oc=depth[6], freeze=False, w_bin=ml_w_bin, a_bin=ml_a_bin,                min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
+
+    if not len(freeze_layers):
+        freeze_layers = [False, False, False, False, False, False, False, False]
+    else:
+        freeze_layers = [bool(int(item)) for item in freeze_layers.split(',')]
+
+    fire1 = self._fire_layer('fire1', self.image_input, oc=depth[0], freeze=freeze_layers[0], w_bin=fl_w_bin, a_bin=fl_a_bin,                min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
+    fire2 = self._fire_layer('fire2', fire1,            oc=depth[1], freeze=freeze_layers[1], w_bin=ml_w_bin, a_bin=ml_a_bin, pool_en=False, min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
+    fire3 = self._fire_layer('fire3', fire2,            oc=depth[2], freeze=freeze_layers[2], w_bin=ml_w_bin, a_bin=ml_a_bin,                min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
+    fire4 = self._fire_layer('fire4', fire3,            oc=depth[3], freeze=freeze_layers[3], w_bin=ml_w_bin, a_bin=ml_a_bin, pool_en=False, min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
+    fire5 = self._fire_layer('fire5', fire4,            oc=depth[4], freeze=freeze_layers[4], w_bin=ml_w_bin, a_bin=ml_a_bin,                min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
+    fire6 = self._fire_layer('fire6', fire5,            oc=depth[5], freeze=freeze_layers[5], w_bin=ml_w_bin, a_bin=ml_a_bin, pool_en=False, min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
+    fire7 = self._fire_layer('fire7', fire6,            oc=depth[6], freeze=freeze_layers[6], w_bin=ml_w_bin, a_bin=ml_a_bin,                min_rng=min_rng, max_rng=max_rng, bias_on=bias_on)
     fire_o = fire7
 
     ####################################################################
@@ -83,7 +89,7 @@ class SqueezeDet(ModelSkeleton):
         self.fire7 = fire7
 
     num_output = mc.ANCHOR_PER_GRID * (mc.CLASSES + 1 + 4)
-    self.preds = self._conv_layer('conv12', fire_o, filters=num_output, size=3, stride=1,
+    self.preds = self._conv_layer('conv12', fire_o, filters=num_output, freeze=freeze_layers[7], size=3, stride=1,
         padding='SAME', xavier=False, relu=False, stddev=0.0001, w_bin=sl_w_bin, bias_on=bias_on)
     print('self.preds:', self.preds)
 

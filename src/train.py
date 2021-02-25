@@ -46,6 +46,9 @@ tf.app.flags.DEFINE_integer('summary_step', 10,
 tf.app.flags.DEFINE_integer('checkpoint_step', 1000,
                             """Number of steps to save summary.""")
 tf.app.flags.DEFINE_string('gpu', '1', """gpu id.""")
+tf.app.flags.DEFINE_string('freeze_layers', "", """Comma separated layers that needs to be freezed. User's responsibility is to give same"""
+                        """ number of inputs as number of layers.""")
+
 
 
 def _draw_box(im, box_list, label_list, color=(128,0,128), cdict=None, form='center', scale=1):
@@ -125,7 +128,7 @@ def train():
       mc = kitti_squeezeDet_config()
       mc.IS_TRAINING = True
       mc.PRETRAINED_MODEL_PATH = FLAGS.pretrained_model_path
-      model = SqueezeDet(mc)
+      model = SqueezeDet(mc, FLAGS.freeze_layers)
     elif FLAGS.net == 'squeezeDet+':
       mc = kitti_squeezeDetPlus_config()
       mc.IS_TRAINING = True
