@@ -2,14 +2,53 @@
 #========================================================================
 # Parameters
 #========================================================================
+helpFunction()
+{
+   echo ""
+   echo "Usage: $0 -c ckpt_path -n checkpoint_number -o output_dir -d tflite_conversion_dataset"
+   echo -e "\t--project_path Project Directory path"
+   echo -e "\t--ckpt_path Checkpoint Directory path"
+   echo -e "\t--ckpt_num checkpoint Number"
+   echo -e "\t--output_path Output Path"
+   echo -e "\t--quant_data Tflite conversion dataset"
+   exit 1 # Exit script after printing help
+}
+
+for arg in "$@"; do
+  shift
+  case "$arg" in
+    "--ckpt_path")      set -- "$@" "-c" ;;
+    "--ckpt_num")       set -- "$@" "-n" ;;
+	"--output_path")    set -- "$@" "-o" ;;
+	"--quant_data")     set -- "$@" "-d" ;;
+    *)                  set -- "$@" "$arg"
+  esac
+done
+
+while getopts "c:n:o:d:" opt
+do
+   case "$opt" in
+      c ) CKPT_PATH="$OPTARG" ;;
+      n ) CKPT_NUM="$OPTARG" ;;
+      o ) OUTPUT_PATH="$OPTARG" ;;
+	  d ) QUANT_DATA="$OPTARG" ;;
+      ? ) helpFunction ;; # Print helpFunction in case parameter is non-existent
+   esac
+done
+
+
+# Begin script in case all parameters are correct
+echo "ckpt_path: $CKPT_PATH";
+echo "ckpt_num: $CKPT_NUM";
+echo "output_path: $OUTPUT_PATH";
+echo "conversion dataset: $QUANT_DATA";
 
 #========================================================================
 # 64x64x1 input case
 #========================================================================
-TRAIN_DIR=train
-CHKPOINT_DIR=./logs/humandet/$TRAIN_DIR
-CHKPOINT_FILE=model.ckpt-249999
-OUTPUT_SUB_DIR=$TRAIN_DIR
+
+CHKPOINT_DIR=$CKPT_PATH
+CHKPOINT_FILE=model.ckpt-$CKPT_NUM
 
 EVAL_PBTXT_FILE=model.pbtxt # pbtxt made in eval/demo mode, not training mode
 INPUT_NODE_NAMES=batch
@@ -18,7 +57,7 @@ INPUT_SHAPE=1,64,64,1
 OUTPUT_NODE_NAMES=conv12/convolution #Reshape_1 <-- This is what we use!!!
 
 #========================================================================
-OUTPUT_DIR=./output/$OUTPUT_SUB_DIR
+OUTPUT_DIR=$OUTPUT_PATH
 OUTPUT_FROZEN_PB_NAME=humancnt_frozen.pb  # frozen .pb
 OUTPUT_TFLITE_NAME=humancnt_frozen.tflite # TF Lite
 OUTPUT_C_NAME=humancnt_frozen.cc          # C++ code
@@ -58,7 +97,9 @@ CONVERSION_TOOL=gen_tflite_and_quant.py #tflite_convert # toco
 
 export CUDA_VISIBLE_DEVICES=-1
 
-python src/ckpt2pb.py \
+proj_dir=`dirname "$0"`
+
+python3 $proj_dir/src/ckpt2pb.py \
 	--check_point_dir=$CHKPOINT_DIR \
 	--check_point_file=$CHKPOINT_FILE \
 	--eval_pbtxt_file=$EVAL_PBTXT_FILE \
@@ -72,13 +113,13 @@ python src/ckpt2pb.py \
 # - tflite_convert from TF 1.9. For previous versions, toco
 # - for quantization, tflite_quant_conv.py is used 
 #========================================================================
-python src/$CONVERSION_TOOL \
+python3 $proj_dir/src/$CONVERSION_TOOL \
 	--output_file=$OUTPUT_DIR/$OUTPUT_TFLITE_NAME \
 	--graph_def_file=$OUTPUT_DIR/$OUTPUT_FROZEN_PB_NAME \
 	--input_arrays=$INPUT_NODE_NAMES \
 	--input_shape=$INPUT_SHAPE \
 	--output_arrays=$OUTPUT_NODE_NAMES \
-	--input_path=./data/input_images/faces \
+	--input_path=$QUANT_DATA \
 	#--optimization=$TFLITE_OPTIMIZE \
 	#--quantization=$TFLITE_QUANT
 
