@@ -66,7 +66,7 @@ class SqueezeDet(ModelSkeleton):
         self.fire7 = fire7
 
     num_output = mc.ANCHOR_PER_GRID * (mc.CLASSES + 1 + 4)
-    self.preds = self._conv_layer('conv12', fire_o, filters=num_output,freeze=freeze_layers[7] size=3, stride=1,
+    self.preds = self._conv_layer('conv12', fire_o, filters=num_output,freeze=freeze_layers[7], size=3, stride=1,
         padding='SAME', xavier=False, relu=False, stddev=0.0001)
     print('self.preds:', self.preds)
 
