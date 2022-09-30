@@ -1,5 +1,5 @@
 easydict==1.9
-joblib==0.13.2
+joblib==1.2.0
 keras==2.2.4
 opencv-python==4.1.1.26
 pillow
